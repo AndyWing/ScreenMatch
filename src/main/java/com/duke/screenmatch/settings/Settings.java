@@ -2,6 +2,8 @@ package com.duke.screenmatch.settings;
 
 import com.duke.screenmatch.utils.Utils;
 import com.intellij.ide.util.PropertiesComponent;
+import com.intellij.openapi.application.WriteAction;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 
 import java.io.*;
@@ -17,6 +19,7 @@ public class Settings {
      * 文件名不要随便改，请注意IO流读写处使用的输入流文件名称
      */
     public static String PROPERTIES_FILE_NAME = "screenMatch.properties";
+    public static String PROPERTIES_FILE_OLD_NAME = "screenMatch_old.properties";
     public static String DIMENS_FILE_NAME = "screenMatch_example_dimens.xml";
 
 
@@ -62,8 +65,6 @@ public class Settings {
             return null;
         }
 
-        migrationIfNeed(basePath);
-
         String project_file_path = Utils.ensurePathEndSeparator(basePath) + PROPERTIES_FILE_NAME;
         VirtualFile virtualFile = Utils.getVirtualFile(project_file_path);
         if (virtualFile == null || !virtualFile.isValid()) {
@@ -73,16 +74,8 @@ public class Settings {
         }
 
         HashMap<String, String> map = new HashMap<>();
-        InputStream inputStream = null;
-        InputStreamReader inputStreamReader = null;
-        BufferedReader reader = null;
-        try {
-            inputStream = virtualFile.getInputStream();
-            if (inputStream == null) {
-                return null;
-            }
-            inputStreamReader = new InputStreamReader(inputStream);
-            reader = new BufferedReader(inputStreamReader);
+        // virtualFile.getInputStream() non-null
+        try(BufferedReader reader = new BufferedReader(new InputStreamReader(virtualFile.getInputStream()))) {
             String temp;
             while ((temp = reader.readLine()) != null) {
                 if (Utils.isEmpty(temp) || temp.startsWith("#") || !temp.contains("=")) {
@@ -126,10 +119,6 @@ public class Settings {
             //addGitignore(basePath);
         } catch (IOException e) {
             e.printStackTrace();
-        } finally {
-            closeReader(reader);
-            closeReader(inputStreamReader);
-            closeInputStream(inputStream);
         }
         try {
             virtualFile = Utils.getVirtualFile(basePath);
@@ -151,24 +140,11 @@ public class Settings {
         if (virtualFile == null || !virtualFile.isValid()) {
             return;
         }
-        InputStream inputStream = null;
-        InputStreamReader inputStreamReader = null;
-        BufferedReader reader = null;
 
-        OutputStream outputStream = null;
-        OutputStreamWriter outputStreamWriter = null;
-        BufferedWriter writer = null;
+        try(BufferedReader reader = new BufferedReader(new InputStreamReader(virtualFile.getInputStream()));
+            BufferedWriter writer = new BufferedWriter(new FileWriter(project_file_path, true))) {
 
-        try {
-            inputStream = virtualFile.getInputStream();
-            inputStreamReader = new InputStreamReader(inputStream);
-            reader = new BufferedReader(inputStreamReader);
-
-            outputStream = new FileOutputStream(project_file_path, true);
-            outputStreamWriter = new OutputStreamWriter(outputStream);
-            writer = new BufferedWriter(outputStreamWriter);
-
-            String temp = null;
+            String temp;
             boolean hasPropertyFile = false;
             boolean hasDimensFile = false;
             while ((temp = reader.readLine()) != null) {
@@ -182,7 +158,7 @@ public class Settings {
             if (!hasPropertyFile || !hasDimensFile) {
                 writer.newLine();
             }
-            String text = "";
+            String text;
             if (!hasPropertyFile) {
                 text = PROPERTIES_FILE_NAME;
                 writer.write(text, 0, text.length());
@@ -197,29 +173,30 @@ public class Settings {
             }
         } catch (Exception e) {
             e.printStackTrace();
-        } finally {
-            closeWriter(writer);
-            closeWriter(outputStreamWriter);
-            closeOutputStream(outputStream);
-            closeReader(reader);
-            closeReader(inputStreamReader);
-            closeInputStream(inputStream);
         }
     }
 
-    public static void migrationIfNeed(String basePath) {
+    public static void migrationIfNeed(Project project) {
         // check if needs do a version update migration
-        PropertiesComponent properties = PropertiesComponent.getInstance();
+        PropertiesComponent properties = PropertiesComponent.getInstance(project);
         int version = properties.getInt(KEY_PLUGIN_VERSION, PLUGIN_VERSION_31);
         if (version != PLUGIN_VERSION_32) {
-            String project_file_path = Utils.ensurePathEndSeparator(basePath) + PROPERTIES_FILE_NAME;
-            VirtualFile virtualFile = Utils.getVirtualFile(project_file_path);
+            VirtualFile virtualFile = Utils.getVirtualFile(project.getBasePath());
             if (virtualFile != null && virtualFile.isValid()) {
                 try {
-                    // rename old format settings file to keep user's configuration
-                    virtualFile.rename(null, PROPERTIES_FILE_NAME + ".old");
+                    VirtualFile propertiesFile = virtualFile.findChild(PROPERTIES_FILE_NAME);
+                    if (propertiesFile != null && propertiesFile.isValid()) {
+                        // rename old format settings file to keep user's configuration
+                        WriteAction.run(() -> {
+                            VirtualFile oldFile = virtualFile.findChild(PROPERTIES_FILE_OLD_NAME);
+                            if (oldFile != null && oldFile.exists()) {
+                                oldFile.delete(project);
+                            }
+                            propertiesFile.rename(project, PROPERTIES_FILE_OLD_NAME);
+                        });
+                    }
                     // write new format settings file
-                    writeSettings(basePath);
+                    writeSettings(Utils.getBasePath(project));
                     properties.setValue(KEY_PLUGIN_VERSION, CURRENT_PLUGIN_VERSION, PLUGIN_VERSION_31);
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -229,11 +206,11 @@ public class Settings {
     }
 
     public static boolean writeSettings(String basePath) {
-        return write(basePath, File.separator + PROPERTIES_FILE_NAME);
+        return write(basePath, PROPERTIES_FILE_NAME);
     }
 
     public static boolean writeDefaultDimens(String basePath) {
-        return write(basePath, File.separator + DIMENS_FILE_NAME);
+        return write(basePath, DIMENS_FILE_NAME);
     }
 
     public static boolean write(String basePath, String fileName) {
@@ -252,93 +229,21 @@ public class Settings {
                 e.printStackTrace();
             }
         }
-        InputStream inputStream = null;
-        InputStreamReader inputStreamReader = null;
-        BufferedReader reader = null;
 
-        OutputStream outputStream = null;
-        OutputStreamWriter outputStreamWriter = null;
-        BufferedWriter writer = null;
-
-        try {
-            //local file path
-            inputStream = Settings.class.getResourceAsStream(fileName);
-            inputStreamReader = new InputStreamReader(inputStream);
-            reader = new BufferedReader(inputStreamReader);
-
-            outputStream = new FileOutputStream(project_file_path);
-            outputStreamWriter = new OutputStreamWriter(outputStream);
-            writer = new BufferedWriter(outputStreamWriter);
-
-            String temp = null;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                Settings.class.getResourceAsStream("/" + fileName)));
+             BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            String temp;
             while ((temp = reader.readLine()) != null) {
                 writer.write(temp, 0, temp.length());
                 writer.newLine();
-                writer.flush();
             }
+            writer.flush();
             return true;
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
-        } finally {
-            closeWriter(writer);
-            closeWriter(outputStreamWriter);
-            closeOutputStream(outputStream);
-            closeReader(reader);
-            closeReader(inputStreamReader);
-            closeInputStream(inputStream);
         }
         return false;
-    }
-
-
-    public static void closeInputStream(InputStream inputStream) {
-        if (inputStream != null) {
-            try {
-                inputStream.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                inputStream = null;
-            }
-        }
-    }
-
-    public static void closeOutputStream(OutputStream outputStream) {
-        if (outputStream != null) {
-            try {
-                outputStream.flush();
-                outputStream.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                outputStream = null;
-            }
-        }
-    }
-
-    public static void closeReader(Reader reader) {
-        if (reader != null) {
-            try {
-                reader.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                reader = null;
-            }
-        }
-    }
-
-    public static void closeWriter(Writer writer) {
-        if (writer != null) {
-            try {
-                writer.flush();
-                writer.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                writer = null;
-            }
-        }
     }
 
     public static void setDefaultModuleName(String moduleName) {

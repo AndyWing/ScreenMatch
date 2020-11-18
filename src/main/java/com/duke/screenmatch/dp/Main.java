@@ -85,7 +85,7 @@ public class Main {
         String result = "Nothing to adapt";
         Stopwatch monitor = Stopwatch.createStarted();
         for (VirtualFile file : params.getProcessFileArray()) {
-            result = matchSingleFile(project, params, dpiSet, file);
+            result = WriteAction.compute(() -> matchSingleFile(project, params, dpiSet, file));
             if (result != null) {
                 break;
             }
@@ -154,10 +154,10 @@ public class Main {
                 // .../res/
                 VirtualFile parent = baseDimensFile.getParent().getParent();
                 // .../res/values-xwXXXdp/
-                VirtualFile targetOutFolder = WriteAction.compute(() -> createChildDirectoryIfNotExist(project, parent, outFolderName));
+                VirtualFile targetOutFolder = createChildDirectoryIfNotExist(project, parent, outFolderName);
                 //生成的dimens文件的路径
                 // .../res/values-xwXXXdp/dimens.xml
-                VirtualFile targetOutFile = WriteAction.compute(() -> createChildFileIfNotExist(project, targetOutFolder, baseDimensFile.getName()));
+                VirtualFile targetOutFile = createChildFileIfNotExist(project, targetOutFolder, baseDimensFile.getName());
 
                 if (IS_DELETE_LEGACY_FOLDER) {
                     /*
@@ -165,7 +165,7 @@ public class Main {
                      */
                     VirtualFile delFolder = parent.findChild(delFolderName);
                     if (delFolder != null && delFolder.isValid()) {
-                        WriteAction.run(() -> delFolder.delete(project));
+                        delFolder.delete(project);
                     }
                 }
 

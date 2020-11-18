@@ -51,6 +51,7 @@ public class MainAction extends AnAction {
             e.printStackTrace();
         }
 
+        Settings.migrationIfNeed(project);
         Settings.invalidateSettingCache(Utils.getBasePath(project));
 
         String not_show_dialog = Settings.get(Settings.KEY_NOT_SHOW_DIALOG);
