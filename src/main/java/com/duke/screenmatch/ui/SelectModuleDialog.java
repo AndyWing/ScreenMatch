@@ -1,6 +1,5 @@
 package com.duke.screenmatch.ui;
 
-import com.android.builder.model.SourceProvider;
 import com.android.tools.idea.gradle.project.model.AndroidModuleModel;
 import com.duke.screenmatch.listener.OnOkClickListener;
 import com.duke.screenmatch.utils.Utils;
@@ -8,13 +7,16 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.util.ReflectionUtil;
 
 import javax.swing.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -98,12 +100,37 @@ public class SelectModuleDialog extends JDialog {
 
         AndroidModuleModel androidModuleModel = AndroidModuleModel.get(module);
         if (androidModuleModel != null) {
-            for (SourceProvider sourceProvider : androidModuleModel.getActiveSourceProviders()) {
-                Header header = new Header(sourceProvider.getName());
+            List sourceProviders = androidModuleModel.getActiveSourceProviders();
+            // for 202.7660.26, the SourceProvider was deprecated and the IdeaSourceProvider become the type of interface
+            // we needs to backwards compatible, so use the reflection method to get the information.
+            for (Object sourceProvider : sourceProviders) {
+                Method getNameMethod = ReflectionUtil.getDeclaredMethod(sourceProvider.getClass(), "getName");
+                if (getNameMethod == null) continue;
+
+                String providerName;
+                try {
+                    providerName = (String) getNameMethod.invoke(sourceProvider);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    continue;
+                }
+
+                Method getResDirectoriesMethod = ReflectionUtil.getDeclaredMethod(sourceProvider.getClass(), "getResDirectories");
+                if (getResDirectoriesMethod == null) continue;
+
+                Collection<File> getResDirectories;
+                try {
+                    getResDirectories = (Collection<File>) getResDirectoriesMethod.invoke(sourceProvider);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    continue;
+                }
+
+                Header header = new Header(providerName);
                 model.addHeader(header);
 
                 boolean hideHeader = true;
-                for (File resDirectory : sourceProvider.getResDirectories()) {
+                for (File resDirectory : getResDirectories) {
                     // list all files in values dir
                     File valuesDir = new File(resDirectory, "values");
                     VirtualFile valueDir = Utils.getVirtualFile(valuesDir.getPath());

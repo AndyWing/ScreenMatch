@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.duke.screenmatch</id>
     <name>ScreenMatch</name>
-    <version>4.0.1</version>
+    <version>4.0.2</version>
     <vendor email="136239173@qq.com" url="http://blog.csdn.net/fesdgasdgasdg?viewmode=contents">Author - duke</vendor>
 
     <description><![CDATA[
@@ -10,6 +10,11 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        4.0.2(2021-05-13):
+        <ul>
+          <li>Adapter the Android Studio 4.2(202.7660.26)</li>
+          <li>Fix keep source comment properties has no effect</li>
+        </ul>
         4.0.1(2020-11-18):
         <ul>
           <li>Fix not generate the screen match properties</li>

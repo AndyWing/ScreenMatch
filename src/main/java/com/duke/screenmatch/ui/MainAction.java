@@ -153,6 +153,7 @@ public class MainAction extends AnAction {
             if (preferDimensFileList != null && !preferDimensFileList.isEmpty()) {
                 builder.setProcessFileArray(preferDimensFileList.toArray(new VirtualFile[0]));
             }
+            builder.setKeepSourceCodeComments(Boolean.parseBoolean(Settings.get(Settings.KEY_KEEP_SOURCE_COMMENT)));
             Pair<Boolean, String> resultMsg = Main.start(project, builder.build());
             success = resultMsg.first;
             Messages.showMessageDialog(resultMsg.second, "Tip", Messages.getInformationIcon());
